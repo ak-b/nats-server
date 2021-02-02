@@ -3808,6 +3808,25 @@ var jsClusterTempl = `
 	accounts { $SYS { users = [ { user: "admin", pass: "s3cr3t!" } ] } }
 `
 
+var jsClusterTemplWithMQTT = `
+	listen: 127.0.0.1:-1
+	server_name: %s
+	jetstream: {max_mem_store: 256MB, max_file_store: 2GB, store_dir: "%s"}
+
+	cluster {
+		name: %s
+		listen: 127.0.0.1:%d
+		routes = [%s]
+	}
+
+	mqtt {
+		listen: 127.0.0.1:-1
+	}
+
+	# For access to system account.
+	accounts { $SYS { users = [ { user: "admin", pass: "s3cr3t!" } ] } }
+`
+
 var jsSuperClusterTempl = `
 	%s
 	gateway {
@@ -3961,6 +3980,14 @@ func (sc *supercluster) randomCluster() *cluster {
 // This will create a cluster that is explicitly configured for the routes, etc.
 // and also has a defined clustername. All configs for routes and cluster name will be the same.
 func createJetStreamClusterExplicit(t *testing.T, clusterName string, numServers int) *cluster {
+	return createJetStreamClusterExplicitEx(t, clusterName, numServers, false)
+}
+
+func createJetStreamClusterExplicitWithMQTT(t *testing.T, clusterName string, numServers int) *cluster {
+	return createJetStreamClusterExplicitEx(t, clusterName, numServers, true)
+}
+
+func createJetStreamClusterExplicitEx(t *testing.T, clusterName string, numServers int, mqtt bool) *cluster {
 	t.Helper()
 	if clusterName == "" || numServers < 1 {
 		t.Fatalf("Bad params")
@@ -3980,7 +4007,12 @@ func createJetStreamClusterExplicit(t *testing.T, clusterName string, numServers
 	for cp := startClusterPort; cp < startClusterPort+numServers; cp++ {
 		storeDir, _ := ioutil.TempDir("", JetStreamStoreDir)
 		sn := fmt.Sprintf("S-%d", cp-startClusterPort+1)
-		conf := fmt.Sprintf(jsClusterTempl, sn, storeDir, clusterName, cp, routeConfig)
+		var conf string
+		if mqtt {
+			conf = fmt.Sprintf(jsClusterTemplWithMQTT, sn, storeDir, clusterName, cp, routeConfig)
+		} else {
+			conf = fmt.Sprintf(jsClusterTempl, sn, storeDir, clusterName, cp, routeConfig)
+		}
 		s, o := RunServerWithConfig(createConfFile(t, []byte(conf)))
 		c.servers = append(c.servers, s)
 		c.opts = append(c.opts, o)
